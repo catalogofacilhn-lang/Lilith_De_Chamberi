@@ -130,7 +130,8 @@ nav{background:var(--dark);border-bottom:1px solid rgba(233,69,96,.35);box-shado
 .card-name{font-family:var(--font-accent);font-size:1.08rem;font-weight:600;margin-bottom:.12rem;color:var(--dark);}
 .card-sizes{font-size:.71rem;color:var(--muted);margin-bottom:.65rem;}
 .card-foot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;}
-.card-actions{display:flex;gap:.5rem;}
+.card-actions{display:flex;gap:.5rem;max-width:100%;}
+@media(max-width:600px){.card-actions{width:100%;}.look-btn{width:100%;padding:.45rem .5rem;}}
 .card-price{font-size:.98rem;font-weight:700;color:var(--mag);}
 .card-price .old{font-size:.74rem;color:var(--blush);text-decoration:line-through;margin-left:.3rem;font-weight:400;}
 .add-btn{background:var(--dark);color:#fff;border:none;padding:.45rem .95rem;border-radius:2px;font-size:.73rem;font-weight:500;cursor:pointer;letter-spacing:.05em;transition:background .15s;font-family:var(--font-ui);}
@@ -867,7 +868,6 @@ function renderProds(list){
             ${p.oldPrice?`<span class="old">${MONEDA} ${p.oldPrice.toLocaleString('es-HN')}</span>`:''}
           </span>
           <div class="card-actions">
-            <button class="add-btn" onclick="event.stopPropagation();openPD(${p.id})">Ver</button>
             <button class="look-btn" onclick="event.stopPropagation();openSpecialFromProduct(products.find(function(prod){return prod.id===${p.id};}))">Consultar</button>
           </div>
         </div>
@@ -932,7 +932,20 @@ function confirmAdd(){
   addToCart(selProd,selSize);
   closeSz();
 }
+// El stock es por producto (no por talla/color): el máximo se aplica a la suma de todas
+// las líneas del carrito de ese producto.
+function cartQtyOf(id){return cart.filter(i=>i.id===id).reduce((s,i)=>s+i.qty,0);}
+function stockLimitOf(id){
+  const p=products.find(p=>p.id===id);
+  return (p&&p.stock!==undefined&&p.stock!==null)?p.stock:Infinity;
+}
+function canAddMore(id){
+  const max=stockLimitOf(id);
+  if(cartQtyOf(id)>=max){showToast('Solo hay '+max+' disponible'+(max!==1?'s':'')+' de este producto');return false;}
+  return true;
+}
 function addToCart(prod,size){
+  if(!canAddMore(prod.id))return;
   const ex=cart.find(i=>i.id===prod.id&&i.size===size);
   if(ex)ex.qty++;
   else cart.push({...prod,size,qty:1});
@@ -985,7 +998,7 @@ function renderCart(){
         <div class="qrow">
           <button class="qb" onclick="chQty(${i.id},'${i.size}',-1)">−</button>
           <span class="qv">${i.qty}</span>
-          <button class="qb" onclick="chQty(${i.id},'${i.size}',1)">+</button>
+          <button class="qb" onclick="chQty(${i.id},'${i.size}',1)"${cartQtyOf(i.id)>=stockLimitOf(i.id)?' disabled style="opacity:.35;cursor:not-allowed;"':''}>+</button>
         </div>
       </div>
       <button class="ci-rm" onclick="rmItem(${i.id},'${i.size}')">✕</button>
@@ -996,6 +1009,7 @@ function renderCart(){
 function rmItem(id,sz){cart=cart.filter(i=>!(i.id===id&&i.size===sz));updateCart();renderCart();}
 function chQty(id,sz,d){
   const i=cart.find(i=>i.id===id&&i.size===sz);if(!i)return;
+  if(d>0&&!canAddMore(id))return;
   i.qty+=d;if(i.qty<=0)rmItem(id,sz);else{updateCart();renderCart();}
 }
 function openCart(){renderCart();document.getElementById('cart-overlay').style.display='block';}
@@ -1231,6 +1245,7 @@ function pdAddToCart(){
   if(!pdSize){showToast('Elige una talla primero');return;}
   if(!pdColor&&pdProd.colors&&pdProd.colors.length){showToast('Elige un color primero');return;}
   const colorLabel=pdColor?pdColor.name:null;
+  if(!canAddMore(pdProd.id))return;
   const ex=cart.find(i=>i.id===pdProd.id&&i.size===pdSize&&i.color===colorLabel);
   if(ex)ex.qty++;
   else cart.push({...pdProd,size:pdSize,color:colorLabel,qty:1});
